@@ -4,7 +4,10 @@
 
 package notify
 
-import "sync"
+import (
+	"os"
+	"sync"
+)
 
 // watchAdd TODO(rjeczalik)
 func watchAdd(nd node, c chan<- EventInfo, e Event) eventDiff {
@@ -139,7 +142,9 @@ func (t *recursiveTree) dispatch() {
 			defer t.rw.RUnlock()
 			// Notify recursive watchpoints found on the path.
 			if err := t.root.WalkPath(dir, fn); err != nil {
-				dbgprint("dispatch did not reach leaf:", err)
+				if !os.IsNotExist(err) {
+					dbgprint("dispatch did not reach leaf:", err)
+				}
 				return
 			}
 			// Notify parent watchpoint.
