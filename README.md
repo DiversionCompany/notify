@@ -3,6 +3,19 @@ notify [![GoDoc](https://godoc.org/github.com/rjeczalik/notify?status.svg)](http
 
 Filesystem event notification library on steroids. (under active development)
 
+*Forked from*
+This was branched from [syncthing:notify](https://github.com/syncthing:notify) which was forked in turn from [rjeczalik/notify](https://github.com/rjeczalik/notify).
+
+To sync changes into this repo:
+
+```shell
+git remote add rjeczalik https://github.com/rjeczalik/notify.git
+git remote add syncthing https://github.com/syncthing/notify.git
+
+git fetch <remote>
+git merge <remote>/master
+```
+
 *Documentation*
 
 [godoc.org/github.com/rjeczalik/notify](https://godoc.org/github.com/rjeczalik/notify)
