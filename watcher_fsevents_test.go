@@ -29,63 +29,6 @@ func TestSplitflags(t *testing.T) {
 	}
 }
 
-func TestWatchStrip(t *testing.T) {
-	const (
-		create = uint32(FSEventsCreated)
-		remove = uint32(FSEventsRemoved)
-		rename = uint32(FSEventsRenamed)
-		write  = uint32(FSEventsModified)
-		inode  = uint32(FSEventsInodeMetaMod)
-		owner  = uint32(FSEventsChangeOwner)
-	)
-	cases := [...][]struct {
-		path string
-		flag uint32
-		diff uint32
-	}{
-		// 1.
-		{
-			{"file", create | write, create | write},
-			{"file", create | write | inode, write | inode},
-		},
-		// 2.
-		{
-			{"file", create, create},
-			{"file", create | remove, remove},
-			{"file", create | remove, create},
-		},
-		// 3.
-		{
-			{"file", create | write, create | write},
-			{"file", create | write | owner, write | owner},
-		},
-		// 4.
-		{
-			{"file", create | write, create | write},
-			{"file", write | inode, write | inode},
-			{"file", remove | write | inode, remove},
-		},
-		{
-			{"file", remove | write | inode, remove},
-		},
-	}
-Test:
-	for i, cas := range cases {
-		if len(cas) == 0 {
-			t.Log("skipped")
-			continue
-		}
-		w := &watch{prev: make(map[string]uint32)}
-		for j, cas := range cas {
-			if diff := w.strip(cas.path, cas.flag); diff != cas.diff {
-				t.Errorf("want diff=%v; got %v (i=%d, j=%d)", Event(cas.diff),
-					Event(diff), i, j)
-				continue Test
-			}
-		}
-	}
-}
-
 // Test for cases 3) and 5) with shadowed write&create events.
 //
 // See comment for (flagdiff).diff method.

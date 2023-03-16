@@ -42,76 +42,12 @@ func splitflags(set uint32) (e []uint32) {
 // on path and event set. It emulates non-recursive watch-point by filtering out
 // events which paths are more than 1 level deeper than the watched path.
 type watch struct {
-	// prev stores last event set  per path in order to filter out old flags
-	// for new events, which appratenly FSEvents likes to retain. It's a disgusting
-	// hack, it should be researched how to get rid of it.
-	prev    map[string]uint32
 	c       chan<- EventInfo
 	stream  *stream
 	path    string
 	events  uint32
 	isrec   int32
 	flushed bool
-}
-
-// Example format:
-//
-//	~ $ (trigger command) # (event set) -> (effective event set)
-//
-// Heuristics:
-//
-// 1. Create event is removed when it was present in previous event set.
-// Example:
-//
-//	~ $ echo > file # Create|Write -> Create|Write
-//	~ $ echo > file # Create|Write|InodeMetaMod -> Write|InodeMetaMod
-//
-// 2. Remove event is removed if it was present in previouse event set.
-// Example:
-//
-//	~ $ touch file # Create -> Create
-//	~ $ rm file    # Create|Remove -> Remove
-//	~ $ touch file # Create|Remove -> Create
-//
-// 3. Write event is removed if not followed by InodeMetaMod on existing
-// file. Example:
-//
-//	~ $ echo > file   # Create|Write -> Create|Write
-//	~ $ chmod +x file # Create|Write|ChangeOwner -> ChangeOwner
-//
-// 4. Write&InodeMetaMod is removed when effective event set contain Remove event.
-// Example:
-//
-//	~ $ echo > file # Write|InodeMetaMod -> Write|InodeMetaMod
-//	~ $ rm file     # Remove|Write|InodeMetaMod -> Remove
-func (w *watch) strip(base string, set uint32) uint32 {
-	const (
-		write = FSEventsModified | FSEventsInodeMetaMod
-		both  = FSEventsCreated | FSEventsRemoved
-	)
-	switch w.prev[base] {
-	case FSEventsCreated:
-		set &^= FSEventsCreated
-		if set&FSEventsRemoved != 0 {
-			w.prev[base] = FSEventsRemoved
-			set &^= write
-		}
-	case FSEventsRemoved:
-		set &^= FSEventsRemoved
-		if set&FSEventsCreated != 0 {
-			w.prev[base] = FSEventsCreated
-		}
-	default:
-		switch set & both {
-		case FSEventsCreated:
-			w.prev[base] = FSEventsCreated
-		case FSEventsRemoved:
-			w.prev[base] = FSEventsRemoved
-			set &^= write
-		}
-	}
-	dbgprintf("split()=%v\n", Event(set))
-	return set
 }
 
 // Dispatch is a stream function which forwards given file events for the watched
@@ -148,7 +84,7 @@ func (w *watch) Dispatch(ev []FSEvent) {
 			}
 		}
 		// TODO(rjeczalik): get diff only from filtered events?
-		e := w.strip(string(base), ev[i].Flags) & events
+		e := ev[i].Flags & events
 		if e == 0 {
 			continue
 		}
@@ -191,7 +127,6 @@ func (fse *fsevents) watch(path string, event Event, isrec int32) (err error) {
 		return errAlreadyWatched
 	}
 	w := &watch{
-		prev:   make(map[string]uint32),
 		c:      fse.c,
 		path:   path,
 		events: uint32(event),
