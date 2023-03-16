@@ -5,7 +5,7 @@ Filesystem event notification library on steroids.
 
 *Forked from*
 
-This was branched from [syncthing:notify](https://github.com/syncthing:notify) which was forked in turn from [rjeczalik/notify](https://github.com/rjeczalik/notify).
+This was forked from [syncthing:notify](https://github.com/syncthing:notify) which was forked in turn from [rjeczalik/notify](https://github.com/rjeczalik/notify).
 
 To sync changes into this repo:
 

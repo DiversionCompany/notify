@@ -4,7 +4,10 @@
 
 package notify
 
-import "sync"
+import (
+	"os"
+	"sync"
+)
 
 // nonrecursiveTree TODO(rjeczalik)
 type nonrecursiveTree struct {
@@ -51,7 +54,9 @@ func (t *nonrecursiveTree) dispatch(c <-chan EventInfo) {
 			t.rw.RLock()
 			// Notify recursive watchpoints found on the path.
 			if err := t.root.WalkPath(dir, fn); err != nil {
-				dbgprint("dispatch did not reach leaf:", err)
+				if !os.IsNotExist(err) {
+					dbgprint("dispatch did not reach leaf:", err)
+				}
 				t.rw.RUnlock()
 				return
 			}
