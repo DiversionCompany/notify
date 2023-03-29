@@ -7,6 +7,8 @@
 
 package notify
 
+// See https://developer.apple.com/documentation/coreservices/1443980-fseventstreamcreate
+
 /*
 #include <CoreServices/CoreServices.h>
 #include <dispatch/dispatch.h>

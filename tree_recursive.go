@@ -127,33 +127,31 @@ func newRecursiveTree(w recursiveWatcher, c chan EventInfo) *recursiveTree {
 func (t *recursiveTree) dispatch() {
 	for ei := range t.c {
 		dbgprintf("dispatching %v on %q", ei.Event(), ei.Path())
-		go func(ei EventInfo) {
-			nd, ok := node{}, false
-			dir, base := split(ei.Path())
-			fn := func(it node, isbase bool) error {
-				if isbase {
-					nd = it
-				} else {
-					it.Watch.Dispatch(ei, recursive)
-				}
-				return nil
+		nd, ok := node{}, false
+		dir, base := split(ei.Path())
+		fn := func(it node, isbase bool) error {
+			if isbase {
+				nd = it
+			} else {
+				it.Watch.Dispatch(ei, recursive)
 			}
-			t.rw.RLock()
-			defer t.rw.RUnlock()
-			// Notify recursive watchpoints found on the path.
-			if err := t.root.WalkPath(dir, fn); err != nil {
-				if !os.IsNotExist(err) {
-					dbgprint("dispatch did not reach leaf:", err)
-				}
-				return
+			return nil
+		}
+		t.rw.RLock()
+		defer t.rw.RUnlock()
+		// Notify recursive watchpoints found on the path.
+		if err := t.root.WalkPath(dir, fn); err != nil {
+			if !os.IsNotExist(err) {
+				dbgprint("dispatch did not reach leaf:", err)
 			}
-			// Notify parent watchpoint.
+			return
+		}
+		// Notify parent watchpoint.
+		nd.Watch.Dispatch(ei, 0)
+		// If leaf watchpoint exists, notify it.
+		if nd, ok = nd.Child[base]; ok {
 			nd.Watch.Dispatch(ei, 0)
-			// If leaf watchpoint exists, notify it.
-			if nd, ok = nd.Child[base]; ok {
-				nd.Watch.Dispatch(ei, 0)
-			}
-		}(ei)
+		}
 	}
 }
 
