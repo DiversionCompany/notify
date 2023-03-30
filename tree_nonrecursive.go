@@ -38,45 +38,49 @@ func newNonrecursiveTree(w watcher, c, rec chan EventInfo) *nonrecursiveTree {
 func (t *nonrecursiveTree) dispatch(c <-chan EventInfo) {
 	for ei := range c {
 		dbgprintf("dispatching %v on %q", ei.Event(), ei.Path())
-		var nd node
-		var isrec bool
-		dir, base := split(ei.Path())
-		fn := func(it node, isbase bool) error {
-			isrec = isrec || it.Watch.IsRecursive()
-			if isbase {
-				nd = it
-			} else {
-				it.Watch.Dispatch(ei, recursive)
-			}
-			return nil
+		t.dispatchEvent(ei)
+	}
+}
+
+func (t *nonrecursiveTree) dispatchEvent(ei EventInfo) {
+	var nd node
+	var isrec bool
+	dir, base := split(ei.Path())
+	fn := func(it node, isbase bool) error {
+		isrec = isrec || it.Watch.IsRecursive()
+		if isbase {
+			nd = it
+		} else {
+			it.Watch.Dispatch(ei, recursive)
 		}
-		t.rw.RLock()
-		// Notify recursive watchpoints found on the path.
-		if err := t.root.WalkPath(dir, fn); err != nil {
-			if !os.IsNotExist(err) {
-				dbgprint("dispatch did not reach leaf:", err)
-			}
-			t.rw.RUnlock()
-			return
-		}
-		// Notify parent watchpoint.
-		nd.Watch.Dispatch(ei, 0)
-		isrec = isrec || nd.Watch.IsRecursive()
-		// If leaf watchpoint exists, notify it.
-		if nd, ok := nd.Child[base]; ok {
-			isrec = isrec || nd.Watch.IsRecursive()
-			nd.Watch.Dispatch(ei, 0)
+		return nil
+	}
+	t.rw.RLock()
+	// Notify recursive watchpoints found on the path.
+	if err := t.root.WalkPath(dir, fn); err != nil {
+		if !os.IsNotExist(err) {
+			dbgprint("dispatch did not reach leaf:", err)
 		}
 		t.rw.RUnlock()
-		// If the event describes newly leaf directory created within
-		if !isrec || ei.Event()&(Create|Remove) == 0 {
-			return
-		}
-		if ok, err := ei.(isDirer).isDir(); !ok || err != nil {
-			return
-		}
-		t.rec <- ei
+		return
 	}
+	// Notify parent watchpoint.
+	nd.Watch.Dispatch(ei, 0)
+	isrec = isrec || nd.Watch.IsRecursive()
+	// If leaf watchpoint exists, notify it.
+	if nd, ok := nd.Child[base]; ok {
+		isrec = isrec || nd.Watch.IsRecursive()
+		nd.Watch.Dispatch(ei, 0)
+	}
+	t.rw.RUnlock()
+	// If the event describes newly leaf directory created within
+	if !isrec || ei.Event()&(Create|Remove) == 0 {
+		return
+	}
+	if ok, err := ei.(isDirer).isDir(); !ok || err != nil {
+		return
+	}
+	t.rec <- ei
 }
 
 // internal TODO(rjeczalik)
