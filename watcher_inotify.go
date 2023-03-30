@@ -256,6 +256,13 @@ func (i *inotify) send(esch <-chan []*event) {
 	i.wg.Done()
 }
 
+func logEvent(prefix string, e *event, idx int, len int) {
+	dbgprintf("%s %v (0x%x) ('%s', i=%d, wd=%d, cookie=%d, len=%d)\n",
+		prefix,
+		Event(e.sys.Mask),
+		e.sys.Mask, e.path, idx, e.sys.Wd, e.sys.Cookie, len)
+}
+
 // transform prepares events read from inotify file descriptor for sending to
 // user. It removes invalid events and these which are no longer present in
 // inotify map. This method may also split one raw event into two different ones
@@ -266,11 +273,13 @@ func (i *inotify) transform(es []*event) []*event {
 	for idx, e := range es {
 		if e.sys.Mask&(unix.IN_IGNORED|unix.IN_Q_OVERFLOW) != 0 {
 			es[idx] = nil
+			logEvent("ignored_event", e, idx, len(es))
 			continue
 		}
 		wd, ok := i.m[e.sys.Wd]
 		if !ok || e.sys.Mask&encode(Event(wd.mask)) == 0 {
 			es[idx] = nil
+			logEvent("undecoded_event", e, idx, len(es))
 			continue
 		}
 		if e.path == "" {
@@ -278,6 +287,7 @@ func (i *inotify) transform(es []*event) []*event {
 		} else {
 			e.path = filepath.Join(wd.path, e.path)
 		}
+		logEvent("received_event", e, idx, len(es))
 		multi = append(multi, decode(Event(wd.mask), e))
 		if e.event == 0 {
 			es[idx] = nil
