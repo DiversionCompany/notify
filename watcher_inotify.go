@@ -88,12 +88,15 @@ func (i *inotify) watch(path string, e Event) (err error) {
 		return errors.New("notify: unknown event")
 	}
 	if err = i.lazyinit(); err != nil {
+		dbgprintf("failed to lazyinit: %v\n", err)
 		return
 	}
 	iwd, err := unix.InotifyAddWatch(int(i.fd), path, encode(e))
 	if err != nil {
+		dbgprintf("failed to add watch on %s: %v\n", path, err)
 		return
 	}
+	dbgprintf("added watch on wd=%d ('%s')\n", iwd, path)
 	i.Lock()
 	if wd, ok := i.m[int32(iwd)]; !ok {
 		i.m[int32(iwd)] = &watched{path: path, mask: uint32(e)}
