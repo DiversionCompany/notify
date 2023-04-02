@@ -25,6 +25,7 @@ const (
 
 // Inotify specific masks are legal, implemented events that are guaranteed to
 // work with notify package on linux-based systems.
+// see https://sites.uclouvain.be/SystInfo/usr/include/sys/inotify.h.html
 const (
 	InAccess       = Event(unix.IN_ACCESS)        // File was accessed
 	InModify       = Event(unix.IN_MODIFY)        // File was modified
