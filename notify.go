@@ -83,3 +83,7 @@ func WatchWithFilter(path string, c chan<- EventInfo,
 func Stop(c chan<- EventInfo) {
 	defaultTree.Stop(c)
 }
+
+func Close() error {
+	return defaultTree.Close()
+}
