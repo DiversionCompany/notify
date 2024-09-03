@@ -79,6 +79,7 @@ func (wp watchpoint) Del(c chan<- EventInfo, e Event) (diff eventDiff) {
 }
 
 func (wp watchpoint) Dispatch(ei EventInfo, extra Event) {
+	dbgprintf("watchpoint - dispatch(%v, %v)", ei, extra)
 	e := eventmask(ei, extra)
 	if !matches(wp[nil], e) {
 		return
