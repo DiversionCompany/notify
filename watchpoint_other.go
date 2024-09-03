@@ -20,5 +20,7 @@ func eventmask(ei EventInfo, extra Event) Event {
 //
 // Internal events must not be sent to user channels and vice versa.
 func matches(set, event Event) bool {
-	return (set&omit)^(event&omit) == 0 && set&event == event
+	match := (set&omit)^(event&omit) == 0 && set&event == event
+	dbgprintf("matches(%v, %v) = %v", set, event, match)
+	return match
 }
