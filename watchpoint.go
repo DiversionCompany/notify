@@ -79,22 +79,19 @@ func (wp watchpoint) Del(c chan<- EventInfo, e Event) (diff eventDiff) {
 }
 
 func (wp watchpoint) Dispatch(ei EventInfo, extra Event) {
-	dbgprintf("watchpoint - dispatch(%v, %v)", ei, extra)
 	e := eventmask(ei, extra)
 	if !matches(wp[nil], e) {
-		dbgprintf("(1) dropped %s on %q: no match", ei.Event(), ei.Path())
+		dbgprintf("Dispatch - event dropped: set=%v, eventmask=%v, path=%q", wp[nil], e, ei.Path())
 		return
 	}
 	for ch, eset := range wp {
 		if ch != nil && matches(eset, e) {
 			select {
 			case ch <- ei:
-				dbgprintf("sent %s on %q to %p", ei.Event(), ei.Path(), ch)
+				dbgprintf("Dispatch - event sent: set=%v, eventmask=%v, path=%q", eset, e, ei.Path())
 			default: // Drop event if receiver is too slow
 				dbgprintf("dropped %s on %q: receiver too slow", ei.Event(), ei.Path())
 			}
-		} else {
-			dbgprintf("(2) dropped %s on %q: no match", ei.Event(), ei.Path())
 		}
 	}
 }
