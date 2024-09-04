@@ -81,16 +81,23 @@ func (wp watchpoint) Del(c chan<- EventInfo, e Event) (diff eventDiff) {
 func (wp watchpoint) Dispatch(ei EventInfo, extra Event) {
 	e := eventmask(ei, extra)
 	if !matches(wp[nil], e) {
-		dbgprintf("Dispatch - event dropped: set=%v, eventmask=%v, path=%q", wp[nil], e, ei.Path())
+		if wp[nil] != 0 {
+			dbgprintf("Dispatch - event dropped: set=%v, eventmask=%v, path=%q", wp[nil], e, ei.Path())
+		}
 		return
 	}
+	notifiedChannels := make(map[chan<- EventInfo]struct{}) // Avoid duplicate notifications to the same channel
 	for ch, eset := range wp {
 		if ch != nil && matches(eset, e) {
-			select {
-			case ch <- ei:
-				dbgprintf("Dispatch - event sent: set=%v, eventmask=%v, path=%q", eset, e, ei.Path())
-			default: // Drop event if receiver is too slow
-				dbgprintf("dropped %s on %q: receiver too slow", ei.Event(), ei.Path())
+			_, channelNotified := notifiedChannels[ch] // Check if channel was already notified
+			if !channelNotified {
+				select {
+				case ch <- ei:
+					dbgprintf("Dispatch - event sent: set=%v, eventmask=%v, path=%q", eset, e, ei.Path())
+					notifiedChannels[ch] = struct{}{} // Mark channel as notified
+				default: // Drop event if receiver is too slow
+					dbgprintf("dropped %s on %q: receiver too slow", ei.Event(), ei.Path())
+				}
 			}
 		}
 	}
