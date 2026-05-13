@@ -9,6 +9,8 @@ package notify
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -367,7 +369,9 @@ func (r *readdcw) loop() {
 			r.loopevent(n, overEx)
 		}
 		if err = overEx.parent.readDirChanges(); err != nil {
-			// TODO: error handling
+			if os.Getenv("DV_DISABLE_NOTIFY_PANIC") == "" {
+				panic(fmt.Sprintf("notify: readDirChanges re-arm failed: %v", err))
+			}
 		}
 		r.loopstate(overEx)
 	}
