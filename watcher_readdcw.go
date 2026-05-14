@@ -356,6 +356,7 @@ func (r *readdcw) loop() {
 			return
 		}
 		if overlapped == nil {
+			// TODO: check key == rewatch delete or 0(panic)
 			warnf("readdcw: unexpected nil overlapped (key=%#x, transferred=%d)", key, n)
 			continue
 		}

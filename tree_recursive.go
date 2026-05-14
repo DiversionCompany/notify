@@ -279,6 +279,8 @@ func (t *recursiveTree) Watch(path string, c chan<- EventInfo,
 			}
 			if e != nil {
 				err = nonil(err, e)
+				// TODO(rjeczalik): child is still watched, warn all its watchpoints
+				// about possible duplicate events via Error event
 				warnf("tree_recursive: child unwatch failed for %q during cleanup: %v", nd.Name, e)
 			}
 		}
