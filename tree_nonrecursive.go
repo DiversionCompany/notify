@@ -38,6 +38,7 @@ func newNonrecursiveTree(w watcher, c, rec chan EventInfo) *nonrecursiveTree {
 func (t *nonrecursiveTree) dispatch(c <-chan EventInfo) {
 	for ei := range c {
 		dbgprintf("dispatching %v on %q", ei.Event(), ei.Path())
+		logFirstEvent(ei.Path())
 		t.dispatchEvent(ei)
 	}
 }
@@ -90,6 +91,7 @@ func (t *nonrecursiveTree) internal(rec <-chan EventInfo) {
 		if ei.Event() == Remove {
 			nd, err := t.root.Get(ei.Path())
 			if err != nil {
+				warnf("tree_nonrecursive: path lookup failed on Remove for %q: %v", ei.Path(), err)
 				t.rw.Unlock()
 				continue
 			}
@@ -298,9 +300,13 @@ func (t *nonrecursiveTree) Stop(c chan<- EventInfo) {
 		case diff == none:
 			return nil
 		case diff[1] == 0:
-			t.w.Unwatch(nd.Name)
+			if err := t.w.Unwatch(nd.Name); err != nil {
+				warnf("tree_nonrecursive: stop unwatch failed for %q: %v", nd.Name, err)
+			}
 		default:
-			t.w.Rewatch(nd.Name, diff[0], diff[1])
+			if err := t.w.Rewatch(nd.Name, diff[0], diff[1]); err != nil {
+				warnf("tree_nonrecursive: stop rewatch failed for %q: %v", nd.Name, err)
+			}
 		}
 		return nil
 	}

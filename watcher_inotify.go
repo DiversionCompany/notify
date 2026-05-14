@@ -199,10 +199,12 @@ func (i *inotify) loop(esch chan<- []*event) {
 				i.Lock()
 				defer i.Unlock()
 				if err = unix.Close(int(fd)); err != nil && err != unix.EINTR {
+					errorf("inotify close(2) failed during shutdown: %v", err)
 					panic("notify: close(2) error " + err.Error())
 				}
 				atomic.StoreInt32(&i.fd, invalidDescriptor)
 				if err = i.epollclose(); err != nil && err != unix.EINTR {
+					errorf("inotify epollclose failed during shutdown: %v", err)
 					panic("notify: epollclose error " + err.Error())
 				}
 				close(esch)
@@ -221,6 +223,10 @@ func (i *inotify) loop(esch chan<- []*event) {
 func (i *inotify) read() (es []*event) {
 	n, err := unix.Read(int(i.fd), i.buffer[:])
 	if err != nil || n < unix.SizeofInotifyEvent {
+		// EINTR / EAGAIN are recoverable, not errors.
+		if err != nil && !errors.Is(err, unix.EINTR) && !errors.Is(err, unix.EAGAIN) {
+			errorf("inotify Read failed: %v", err)
+		}
 		return
 	}
 	var sys *unix.InotifyEvent

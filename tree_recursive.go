@@ -127,6 +127,7 @@ func newRecursiveTree(w recursiveWatcher, c chan EventInfo) *recursiveTree {
 func (t *recursiveTree) dispatch() {
 	for ei := range t.c {
 		dbgprintf("dispatching %v on %q", ei.Event(), ei.Path())
+		logFirstEvent(ei.Path())
 		t.dispatchEvent(ei)
 	}
 }
@@ -280,6 +281,7 @@ func (t *recursiveTree) Watch(path string, c chan<- EventInfo,
 				err = nonil(err, e)
 				// TODO(rjeczalik): child is still watched, warn all its watchpoints
 				// about possible duplicate events via Error event
+				warnf("tree_recursive: child unwatch failed for %q during cleanup: %v", nd.Name, e)
 			}
 		}
 		return err

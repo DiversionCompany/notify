@@ -5,15 +5,70 @@
 package notify
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 )
 
-var dbgprint func(...interface{})
+var firstEventOnce sync.Once
 
-var dbgprintf func(string, ...interface{})
+func logFirstEvent(path string) {
+	firstEventOnce.Do(func() {
+		infof("first event dispatched (path=%q)", path)
+	})
+}
+
+// Level classifies log messages emitted by the notify package.
+type Level int
+
+const (
+	LevelDebug Level = iota
+	LevelInfo
+	LevelWarn
+	LevelError
+)
+
+var logger func(level Level, format string, v ...interface{})
+
+// SetLogger must be called before any Watch -- logger is not mutex-guarded.
+func SetLogger(fn func(Level, string, ...interface{})) {
+	logger = fn
+}
+
+func debugf(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelDebug, format, v...)
+	}
+}
+
+func infof(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelInfo, format, v...)
+	}
+}
+
+func warnf(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelWarn, format, v...)
+	}
+}
+
+func errorf(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelError, format, v...)
+	}
+}
+
+// Back-compat shims for existing dbgprint / dbgprintf call sites.
+var dbgprintf = debugf
+
+var dbgprint = func(v ...interface{}) {
+	// Sprintln (not Sprint) preserves Println-style spacing between args.
+	debugf("%s", strings.TrimRight(fmt.Sprintln(v...), "\n"))
+}
 
 func dbgcallstack(max int) []string {
 	pc, stack := make([]uintptr, max), make([]string, 0, max)
@@ -32,25 +87,21 @@ func dbgcallstack(max int) []string {
 	return stack
 }
 
-func SetLogger(print func(...interface{}), printf func(string, ...interface{})) {
-	dbgprint = print
-	dbgprintf = printf
-}
-
 func init() {
 	if _, ok := os.LookupEnv("NOTIFY_DEBUG"); ok || debugTag {
 		log.SetOutput(os.Stdout)
 		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-		dbgprint = func(v ...interface{}) {
-			v = append([]interface{}{"[D] "}, v...)
-			log.Println(v...)
+		logger = func(level Level, format string, v ...interface{}) {
+			prefix := "[D] "
+			switch level {
+			case LevelInfo:
+				prefix = "[I] "
+			case LevelWarn:
+				prefix = "[W] "
+			case LevelError:
+				prefix = "[E] "
+			}
+			log.Printf(prefix+format, v...)
 		}
-		dbgprintf = func(format string, v ...interface{}) {
-			format = "[D] " + format
-			log.Printf(format, v...)
-		}
-		return
 	}
-	dbgprint = func(v ...interface{}) {}
-	dbgprintf = func(format string, v ...interface{}) {}
 }
