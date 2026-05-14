@@ -223,7 +223,9 @@ func (i *inotify) loop(esch chan<- []*event) {
 func (i *inotify) read() (es []*event) {
 	n, err := unix.Read(int(i.fd), i.buffer[:])
 	if err != nil || n < unix.SizeofInotifyEvent {
-		if err != nil {
+		// EINTR and EAGAIN are recoverable -- a signal interrupted the syscall
+		// or the non-blocking fd had no data ready. Don't surface as errors.
+		if err != nil && !errors.Is(err, unix.EINTR) && !errors.Is(err, unix.EAGAIN) {
 			errorf("inotify Read failed: %v", err)
 		}
 		return

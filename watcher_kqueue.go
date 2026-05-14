@@ -86,7 +86,7 @@ func (k *kq) Record(w *watched) {
 // Del implements trigger.
 func (k *kq) Del(w *watched) {
 	if err := syscall.Close(w.fd); err != nil {
-		warnf("kqueue: fd close failed in Del: %v", err)
+		warnf("kqueue: fd close failed in Del (path=%q, fd=%d): %v", w.p, w.fd, err)
 	}
 	delete(k.idLkp, w.fd)
 	delete(k.pthLkp, w.p)

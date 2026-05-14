@@ -13,13 +13,8 @@ import (
 	"sync"
 )
 
-// firstEventOnce gates the one-shot "watcher is alive" info log emitted on
-// the first event dispatched to a user channel. Consumers tail their logs
-// for this line as evidence that the notify pipeline is wired up.
 var firstEventOnce sync.Once
 
-// logFirstEvent emits the one-shot heartbeat. Safe to call on every
-// dispatch -- only the first call produces a log line.
 func logFirstEvent(path string) {
 	firstEventOnce.Do(func() {
 		infof("first event dispatched (path=%q)", path)
@@ -39,7 +34,8 @@ const (
 var logger func(level Level, format string, v ...interface{})
 
 // SetLogger installs a leveled callback that receives all log messages emitted
-// by the notify package. Passing nil disables logging.
+// by the notify package. Call this before any Watch -- the package-level
+// logger var is not guarded by a mutex. Passing nil disables logging.
 func SetLogger(fn func(Level, string, ...interface{})) {
 	logger = fn
 }
@@ -74,7 +70,9 @@ func errorf(format string, v ...interface{}) {
 var dbgprintf = debugf
 
 var dbgprint = func(v ...interface{}) {
-	debugf("%s", fmt.Sprint(v...))
+	// fmt.Sprintln matches log.Println's spacing (single space between args);
+	// strip the trailing newline since debugf's consumer adds its own.
+	debugf("%s", strings.TrimRight(fmt.Sprintln(v...), "\n"))
 }
 
 func dbgcallstack(max int) []string {
