@@ -5,15 +5,56 @@
 package notify
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"runtime"
 	"strings"
 )
 
-var dbgprint func(...interface{})
+// Level classifies log messages emitted by the notify package.
+type Level int
 
-var dbgprintf func(string, ...interface{})
+const (
+	LevelDebug Level = iota
+	LevelWarn
+	LevelError
+)
+
+var logger func(level Level, format string, v ...interface{})
+
+// SetLogger installs a leveled callback that receives all log messages emitted
+// by the notify package. Passing nil disables logging.
+func SetLogger(fn func(Level, string, ...interface{})) {
+	logger = fn
+}
+
+func debugf(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelDebug, format, v...)
+	}
+}
+
+func warnf(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelWarn, format, v...)
+	}
+}
+
+func errorf(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelError, format, v...)
+	}
+}
+
+// dbgprintf and dbgprint preserve the old call shape used throughout the
+// package; they route to debugf so existing call sites keep working without
+// modification.
+var dbgprintf = debugf
+
+var dbgprint = func(v ...interface{}) {
+	debugf("%s", fmt.Sprint(v...))
+}
 
 func dbgcallstack(max int) []string {
 	pc, stack := make([]uintptr, max), make([]string, 0, max)
@@ -32,25 +73,19 @@ func dbgcallstack(max int) []string {
 	return stack
 }
 
-func SetLogger(print func(...interface{}), printf func(string, ...interface{})) {
-	dbgprint = print
-	dbgprintf = printf
-}
-
 func init() {
 	if _, ok := os.LookupEnv("NOTIFY_DEBUG"); ok || debugTag {
 		log.SetOutput(os.Stdout)
 		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
-		dbgprint = func(v ...interface{}) {
-			v = append([]interface{}{"[D] "}, v...)
-			log.Println(v...)
+		logger = func(level Level, format string, v ...interface{}) {
+			prefix := "[D] "
+			switch level {
+			case LevelWarn:
+				prefix = "[W] "
+			case LevelError:
+				prefix = "[E] "
+			}
+			log.Printf(prefix+format, v...)
 		}
-		dbgprintf = func(format string, v ...interface{}) {
-			format = "[D] " + format
-			log.Printf(format, v...)
-		}
-		return
 	}
-	dbgprint = func(v ...interface{}) {}
-	dbgprintf = func(format string, v ...interface{}) {}
 }

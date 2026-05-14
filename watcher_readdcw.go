@@ -356,7 +356,7 @@ func (r *readdcw) loop() {
 			return
 		}
 		if overlapped == nil {
-			// TODO: check key == rewatch delete or 0(panic)
+			warnf("readdcw: unexpected nil overlapped (key=%#x)", key)
 			continue
 		}
 		overEx := (*overlappedEx)(unsafe.Pointer(overlapped))
@@ -367,7 +367,7 @@ func (r *readdcw) loop() {
 			r.loopevent(n, overEx)
 		}
 		if err = overEx.parent.readDirChanges(); err != nil {
-			// TODO: error handling
+			errorf("readDirChanges re-arm failed: %v", err)
 		}
 		r.loopstate(overEx)
 	}
