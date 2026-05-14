@@ -33,9 +33,7 @@ const (
 
 var logger func(level Level, format string, v ...interface{})
 
-// SetLogger installs a leveled callback that receives all log messages emitted
-// by the notify package. Call this before any Watch -- the package-level
-// logger var is not guarded by a mutex. Passing nil disables logging.
+// SetLogger must be called before any Watch -- logger is not mutex-guarded.
 func SetLogger(fn func(Level, string, ...interface{})) {
 	logger = fn
 }
@@ -64,14 +62,11 @@ func errorf(format string, v ...interface{}) {
 	}
 }
 
-// dbgprintf and dbgprint preserve the old call shape used throughout the
-// package; they route to debugf so existing call sites keep working without
-// modification.
+// Back-compat shims for existing dbgprint / dbgprintf call sites.
 var dbgprintf = debugf
 
 var dbgprint = func(v ...interface{}) {
-	// fmt.Sprintln matches log.Println's spacing (single space between args);
-	// strip the trailing newline since debugf's consumer adds its own.
+	// Sprintln (not Sprint) preserves Println-style spacing between args.
 	debugf("%s", strings.TrimRight(fmt.Sprintln(v...), "\n"))
 }
 
