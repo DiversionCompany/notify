@@ -127,6 +127,7 @@ func newRecursiveTree(w recursiveWatcher, c chan EventInfo) *recursiveTree {
 func (t *recursiveTree) dispatch() {
 	for ei := range t.c {
 		dbgprintf("dispatching %v on %q", ei.Event(), ei.Path())
+		logFirstEvent(ei.Path())
 		t.dispatchEvent(ei)
 	}
 }

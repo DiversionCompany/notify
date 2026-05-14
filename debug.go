@@ -10,13 +10,28 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 )
+
+// firstEventOnce gates the one-shot "watcher is alive" info log emitted on
+// the first event dispatched to a user channel. Consumers tail their logs
+// for this line as evidence that the notify pipeline is wired up.
+var firstEventOnce sync.Once
+
+// logFirstEvent emits the one-shot heartbeat. Safe to call on every
+// dispatch -- only the first call produces a log line.
+func logFirstEvent(path string) {
+	firstEventOnce.Do(func() {
+		infof("first event dispatched (path=%q)", path)
+	})
+}
 
 // Level classifies log messages emitted by the notify package.
 type Level int
 
 const (
 	LevelDebug Level = iota
+	LevelInfo
 	LevelWarn
 	LevelError
 )
@@ -32,6 +47,12 @@ func SetLogger(fn func(Level, string, ...interface{})) {
 func debugf(format string, v ...interface{}) {
 	if logger != nil {
 		logger(LevelDebug, format, v...)
+	}
+}
+
+func infof(format string, v ...interface{}) {
+	if logger != nil {
+		logger(LevelInfo, format, v...)
 	}
 }
 
@@ -80,6 +101,8 @@ func init() {
 		logger = func(level Level, format string, v ...interface{}) {
 			prefix := "[D] "
 			switch level {
+			case LevelInfo:
+				prefix = "[I] "
 			case LevelWarn:
 				prefix = "[W] "
 			case LevelError:
