@@ -364,7 +364,12 @@ func (r *readdcw) loop() {
 		if overEx == nil || overEx.parent == nil {
 			dbgprintf("incomplete completion status transferred=%d, overlapped=%#v, key=%#b", n, overEx, key)
 			continue
-		} else if n != 0 {
+		}
+		if err != nil {
+			r.handleFailedCompletion(overEx, err)
+			continue
+		}
+		if n != 0 {
 			r.loopevent(n, overEx)
 		}
 		if err = overEx.parent.readDirChanges(); err != nil {
@@ -374,10 +379,44 @@ func (r *readdcw) loop() {
 	}
 }
 
+// handleFailedCompletion handles a completion packet dequeued with an error:
+// the pending ReadDirectoryChangesW I/O failed (volume reset, aborted by a
+// filter driver, handle closed outside the package). Re-arming the same handle
+// can report success while the OS never posts a completion for it again, which
+// leaves the watch silently dead -- so open a fresh handle instead. Failures
+// caused by our own unwatch/rewatch teardown keep the old state-machine path.
+func (r *readdcw) handleFailedCompletion(overEx *overlappedEx, err error) {
+	g := overEx.parent
+	path := syscall.UTF16ToString(g.pathw)
+	r.Lock()
+	defer r.Unlock()
+	if g.parent.filter&onlyMachineStates != 0 {
+		// Unwatch/rewatch in progress: closing a handle aborts its pending I/O,
+		// so this failure is expected and the state machine must consume it.
+		dbgprintf("readdcw: completion failed during unwatch/rewatch for %q: %v", path, err)
+		r.loopstateLocked(overEx)
+		return
+	}
+	handle := syscall.Handle(atomic.LoadUintptr((*uintptr)(&g.handle)))
+	if handle == syscall.InvalidHandle {
+		dbgprintf("readdcw: completion failed for already-closed handle %q: %v", path, err)
+		return
+	}
+	errorf("readdcw: completion failed for %q: %v; recreating the watch handle", path, err)
+	syscall.CloseHandle(handle) // best effort: the handle is likely already dead
+	if regErr := g.register(r.cph); regErr != nil {
+		errorf("readdcw: failed to recreate the watch handle for %q, watch is dead: %v", path, regErr)
+	}
+}
+
 // TODO(pknap) : doc
 func (r *readdcw) loopstate(overEx *overlappedEx) {
 	r.Lock()
 	defer r.Unlock()
+	r.loopstateLocked(overEx)
+}
+
+func (r *readdcw) loopstateLocked(overEx *overlappedEx) {
 	filter := overEx.parent.parent.filter
 	if filter&onlyMachineStates == 0 {
 		return
