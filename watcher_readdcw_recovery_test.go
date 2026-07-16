@@ -126,3 +126,41 @@ func TestRecreateHandleAfterFailedCompletion(t *testing.T) {
 
 	awaitEvent("after-recovery")
 }
+
+// TestRegisterFailureClosesHandle covers register failing after CreateFile
+// succeeded. Arming a plain file forces that: CreateFile and the completion
+// port association accept a file handle, but ReadDirectoryChangesW needs a
+// directory and fails. The grip must not keep the open, unarmed handle -- no
+// completion will ever arrive for it, so it must read as dead (InvalidHandle).
+func TestRegisterFailureClosesHandle(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "plain.txt")
+	if err := os.WriteFile(file, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	pathw, err := syscall.UTF16FromString(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cph, err := syscall.CreateIoCompletionPort(syscall.InvalidHandle, 0, 0, 0)
+	if err != nil {
+		t.Fatalf("CreateIoCompletionPort: %v", err)
+	}
+	defer syscall.CloseHandle(cph)
+
+	g := &grip{
+		handle:   syscall.InvalidHandle,
+		filter:   uint32(Write),
+		pathw:    pathw,
+		ovlapped: &overlappedEx{},
+	}
+	g.ovlapped.parent = g
+
+	if err := g.register(cph); err == nil {
+		t.Fatal("register on a plain file should fail at readDirChanges")
+	}
+	if g.handle != syscall.InvalidHandle {
+		t.Fatalf("failed register left an open handle: %v", g.handle)
+	}
+}

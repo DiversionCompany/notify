@@ -100,11 +100,19 @@ func (g *grip) register(cph syscall.Handle) (err error) {
 	); err != nil {
 		return
 	}
-	if _, err = syscall.CreateIoCompletionPort(g.handle, cph, 0, 0); err != nil {
-		syscall.CloseHandle(g.handle)
-		return
+	if _, err = syscall.CreateIoCompletionPort(g.handle, cph, 0, 0); err == nil {
+		err = g.readDirChanges()
 	}
-	return g.readDirChanges()
+	if err != nil {
+		// The handle was opened but never armed, so no completion will ever
+		// arrive for it. Close it and store InvalidHandle so the grip reads
+		// as dead everywhere, instead of leaking an open handle that a later
+		// closeHandle would close a second time (the value may be reused by
+		// the OS by then).
+		syscall.CloseHandle(g.handle)
+		atomic.StoreUintptr((*uintptr)(&g.handle), uintptr(syscall.InvalidHandle))
+	}
+	return
 }
 
 // readDirChanges tells the system to store file change information in grip's
