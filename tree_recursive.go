@@ -5,6 +5,7 @@
 package notify
 
 import (
+	"fmt"
 	"os"
 	"sync"
 )
@@ -171,6 +172,17 @@ type eventInfoAtPath struct {
 }
 
 func (ei eventInfoAtPath) Path() string { return ei.path }
+
+func (ei eventInfoAtPath) String() string {
+	return ei.Event().String() + `: "` + ei.Path() + `"`
+}
+
+func (ei eventInfoAtPath) isDir() (bool, error) {
+	return ei.EventInfo.(isDirer).isDir()
+}
+
+var _ fmt.Stringer = eventInfoAtPath{}
+var _ isDirer = eventInfoAtPath{}
 
 func (t *recursiveTree) dispatchWatchOverflow(ei EventInfo) {
 	t.rw.RLock()

@@ -590,6 +590,13 @@ func (r *readdcw) rewatch(path string, oldevent, newevent uint32, recursive bool
 	if wd.filter&(onlyNotifyChanges|onlyNGlobalEvents) != oldevent {
 		panic(`notify: windows re-watcher logic error`)
 	}
+	overflow := uint32(FileNotifyOverflow)
+	if recursive == wd.recursive && oldevent&^overflow != 0 &&
+		oldevent^newevent == overflow {
+		// This toggle does not change either native grip.
+		wd.filter = newevent
+		return
+	}
 	wd.filter = stateRewatch | newevent
 	wd.recursive, recursive = recursive, wd.recursive
 	if err = wd.closeHandle(); err != nil {

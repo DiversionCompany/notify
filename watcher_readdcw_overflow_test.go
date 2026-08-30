@@ -257,6 +257,46 @@ func TestWatchAndRewatchAcceptFileNotifyOverflow(t *testing.T) {
 	}
 }
 
+func TestRewatchOverflowSubscriptionKeepsNativeWatch(t *testing.T) {
+	events := make(chan EventInfo, 1)
+	r := newWatcher(events).(*readdcw)
+	defer r.Close()
+
+	path := t.TempDir()
+	if err := r.Watch(path, Write); err != nil {
+		t.Fatalf("Watch(Write): %v", err)
+	}
+
+	r.Lock()
+	wd := r.m[path]
+	grip := wd.digrip[0]
+	handle := grip.handle
+	count := wd.count
+	r.Unlock()
+
+	for _, filters := range []struct {
+		old Event
+		new Event
+	}{
+		{old: Write, new: Write | FileNotifyOverflow},
+		{old: Write | FileNotifyOverflow, new: Write},
+	} {
+		if err := r.Rewatch(path, filters.old, filters.new); err != nil {
+			t.Fatalf("Rewatch(%v, %v): %v", filters.old, filters.new, err)
+		}
+		r.Lock()
+		if wd.filter != uint32(filters.new) {
+			r.Unlock()
+			t.Fatalf("filter=%#x; want %#x", wd.filter, filters.new)
+		}
+		if wd.digrip[0] != grip || grip.handle != handle || wd.count != count {
+			r.Unlock()
+			t.Fatal("overflow subscription change restarted the native watch")
+		}
+		r.Unlock()
+	}
+}
+
 func TestFileNotifyOverflowDispatchesAtRecursiveWatchRoot(t *testing.T) {
 	backend := make(chan EventInfo, buffer)
 	r := newWatcher(backend).(*readdcw)

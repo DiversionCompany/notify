@@ -45,9 +45,9 @@ const (
 )
 
 // FileNotifyOverflow reports that ReadDirectoryChangesW discarded a batch of
-// events because the watch buffer overflowed. Each subscribed logical watch
-// receives an event whose path is the root passed to Watch. The event is
-// opt-in, is not included in All, and is not a native filter.
+// events because the watch buffer overflowed. Each subscribed watch receives
+// an event whose path is its absolute, symlink-resolved root. The event is
+// opt-in, is not included in All, and is not passed to ReadDirectoryChangesW.
 const FileNotifyOverflow Event = 1 << 27
 
 const (

@@ -4,6 +4,7 @@
 package notify
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -163,6 +164,16 @@ func assertSingleOverflowAtPath(t *testing.T, events chan EventInfo, wantPath st
 		}
 		if event.Path() != wantPath {
 			t.Fatalf("event path=%q; want %q", event.Path(), wantPath)
+		}
+		if got, want := fmt.Sprint(event), FileNotifyOverflow.String()+`: "`+wantPath+`"`; got != want {
+			t.Fatalf("event string=%q; want %q", got, want)
+		}
+		isDir, ok := event.(isDirer)
+		if !ok {
+			t.Fatal("overflow event does not preserve isDirer")
+		}
+		if dir, err := isDir.isDir(); err != nil || !dir {
+			t.Fatalf("overflow event isDir()=(%v, %v); want (true, nil)", dir, err)
 		}
 	default:
 		t.Fatalf("no overflow event for %q", wantPath)
