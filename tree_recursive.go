@@ -133,6 +133,11 @@ func (t *recursiveTree) dispatch() {
 }
 
 func (t *recursiveTree) dispatchEvent(ei EventInfo) {
+	if isWatchOverflow(ei) {
+		t.dispatchWatchOverflow(ei)
+		return
+	}
+
 	nd, ok := node{}, false
 	dir, base := split(ei.Path())
 	fn := func(it node, isbase bool) error {
@@ -157,6 +162,38 @@ func (t *recursiveTree) dispatchEvent(ei EventInfo) {
 	// If leaf watchpoint exists, notify it.
 	if nd, ok = nd.Child[base]; ok {
 		nd.Watch.Dispatch(ei, 0)
+	}
+}
+
+type eventInfoAtPath struct {
+	EventInfo
+	path string
+}
+
+func (ei eventInfoAtPath) Path() string { return ei.path }
+
+func (t *recursiveTree) dispatchWatchOverflow(ei EventInfo) {
+	t.rw.RLock()
+	defer t.rw.RUnlock()
+
+	root, err := t.root.Get(ei.Path())
+	if err != nil {
+		if !os.IsNotExist(err) {
+			dbgprint("dispatch did not reach overflow root:", err)
+		}
+		return
+	}
+
+	isRecursive := watchIsRecursive(root)
+	err = root.Walk(func(nd node) error {
+		nd.Watch.Dispatch(eventInfoAtPath{EventInfo: ei, path: nd.Name}, 0)
+		if nd.Name == root.Name && !isRecursive {
+			return errSkip
+		}
+		return nil
+	}, nil)
+	if err != nil {
+		dbgprint("dispatch overflow failed:", err)
 	}
 }
 

@@ -7,6 +7,10 @@
 
 package notify
 
+func isWatchOverflow(ei EventInfo) bool {
+	return ei.Event() == FileNotifyOverflow
+}
+
 // eventmask uses ei to create a new event which contains internal flags used by
 // notify package logic. If one of FileAction* masks is detected, this function
 // adds corresponding FileNotifyChange* values. This allows non registered

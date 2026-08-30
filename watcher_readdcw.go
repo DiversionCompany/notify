@@ -20,7 +20,7 @@ import (
 // The buffer have to be DWORD-aligned and, if notify is used in monitoring a
 // directory over the network, its size must not be greater than 64KB. Each of
 // watched directories uses its own buffer for storing events.
-const readBufferSize = 4096
+const readBufferSize = 64 * 1024
 
 // Since all operations which go through the Windows completion routine are done
 // asynchronously, filter may set one of the constants below. They were defined
@@ -129,11 +129,25 @@ func (g *grip) readDirChanges() error {
 		&g.buffer[0],
 		uint32(unsafe.Sizeof(g.buffer)),
 		g.recursive,
-		encode(g.filter),
+		readDirectoryChangesFilter(g.filter),
 		nil,
 		(*syscall.Overlapped)(unsafe.Pointer(g.ovlapped)),
 		0,
 	)
+}
+
+// readDirectoryChangesFilter returns the native filter passed to
+// ReadDirectoryChangesW. An overflow-only subscription still needs to observe
+// native changes so that Windows can report when their notification data is
+// discarded; ordinary events remain filtered out by the stored event set.
+func readDirectoryChangesFilter(filter uint32) uint32 {
+	if encoded := encode(filter); encoded != 0 {
+		return encoded
+	}
+	if Event(filter)&FileNotifyOverflow != 0 {
+		return fileNotifyChangeAll
+	}
+	return 0
 }
 
 // encode transforms a generic filter, which contains platform independent and
@@ -141,6 +155,7 @@ func (g *grip) readDirChanges() error {
 // parameter in ReadDirectoryChangesW function.
 func encode(filter uint32) uint32 {
 	e := Event(filter & (onlyNGlobalEvents | onlyNotifyChanges))
+	e &^= FileNotifyOverflow
 	if e&dirmarker != 0 {
 		return uint32(FileNotifyChangeDirName)
 	}
@@ -194,15 +209,29 @@ func newWatched(cph syscall.Handle, filter uint32, recursive bool,
 
 // TODO : doc
 func (wd *watched) recreate(cph syscall.Handle) (err error) {
-	filefilter := wd.filter &^ uint32(FileNotifyChangeDirName)
+	filefilter, dirfilter := splitReadDirectoryChangesFilters(wd.filter)
 	if err = wd.updateGrip(0, cph, filefilter == 0, filefilter); err != nil {
 		return
 	}
-	dirfilter := wd.filter & uint32(FileNotifyChangeDirName|Create|Remove)
-	if err = wd.updateGrip(1, cph, dirfilter == 0, wd.filter|uint32(dirmarker)); err != nil {
+	if err = wd.updateGrip(1, cph, dirfilter == 0, dirfilter); err != nil {
 		return
 	}
 	wd.filter &^= onlyMachineStates
+	return
+}
+
+// splitReadDirectoryChangesFilters determines which of the file and directory
+// grips are needed. FileNotifyOverflow is a synthetic event, so it must not
+// create an extra grip when another native filter already arms the watch.
+func splitReadDirectoryChangesFilters(filter uint32) (filefilter, dirfilter uint32) {
+	eventfilter := filter &^ (onlyMachineStates | uint32(FileNotifyOverflow))
+	filefilter = eventfilter &^ uint32(FileNotifyChangeDirName)
+	if eventfilter&uint32(FileNotifyChangeDirName|Create|Remove) != 0 {
+		dirfilter = eventfilter | uint32(dirmarker)
+	}
+	if filefilter == 0 && dirfilter == 0 && filter&uint32(FileNotifyOverflow) != 0 {
+		filefilter = uint32(FileNotifyOverflow)
+	}
 	return
 }
 
@@ -303,7 +332,7 @@ func (r *readdcw) RecursiveWatch(path string, event Event) error {
 // already exists, function tries to rewatch it with new filters(NOT VALID). Moreover,
 // watch starts the main event loop goroutine when called for the first time.
 func (r *readdcw) watch(path string, event Event, recursive bool) error {
-	if event&^(All|fileNotifyChangeAll) != 0 {
+	if event&^(All|fileNotifyChangeAll|FileNotifyOverflow) != 0 {
 		return errors.New("notify: unknown event")
 	}
 
@@ -377,13 +406,43 @@ func (r *readdcw) loop() {
 			r.handleFailedCompletion(overEx, err)
 			continue
 		}
-		if n != 0 {
-			r.loopevent(n, overEx)
-		}
-		if err = overEx.parent.readDirChanges(); err != nil {
+		if err = r.handleSuccessfulCompletion(n, overEx, (*grip).readDirChanges); err != nil {
 			errorf("readDirChanges re-arm failed for %q: %v", syscall.UTF16ToString(overEx.parent.pathw), err)
 		}
-		r.loopstate(overEx)
+	}
+}
+
+// handleSuccessfulCompletion parses a normal completion or reports a
+// successful zero-byte completion as an overflow, then rearms the watch and
+// advances any pending teardown state.
+func (r *readdcw) handleSuccessfulCompletion(n uint32, overEx *overlappedEx,
+	rearm func(*grip) error) error {
+	if n != 0 {
+		r.loopevent(n, overEx)
+	} else {
+		r.reportOverflow(overEx)
+	}
+	err := rearm(overEx.parent)
+	r.loopstate(overEx)
+	return err
+}
+
+// reportOverflow sends the synthetic overflow event only when the watch
+// explicitly requested it and is not being torn down.
+func (r *readdcw) reportOverflow(overEx *overlappedEx) {
+	g := overEx.parent
+	r.Lock()
+	filter := g.parent.filter
+	report := filter&onlyMachineStates == 0 &&
+		filter&uint32(FileNotifyOverflow) != 0
+	r.Unlock()
+	if !report {
+		return
+	}
+	r.c <- &event{
+		pathw: g.pathw,
+		ftype: fTypeDirectory,
+		e:     FileNotifyOverflow,
 	}
 }
 
@@ -519,7 +578,7 @@ func (r *readdcw) RecursiveRewatch(oldpath, newpath string, oldevent,
 
 // TODO : (pknap) doc.
 func (r *readdcw) rewatch(path string, oldevent, newevent uint32, recursive bool) (err error) {
-	if Event(newevent)&^(All|fileNotifyChangeAll) != 0 {
+	if Event(newevent)&^(All|fileNotifyChangeAll|FileNotifyOverflow) != 0 {
 		return errors.New("notify: unknown event")
 	}
 	var wd *watched

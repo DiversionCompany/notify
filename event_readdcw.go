@@ -44,6 +44,12 @@ const (
 	FileNotifyChangeSecurity   = Event(syscallFileNotifyChangeSecurity)
 )
 
+// FileNotifyOverflow reports that ReadDirectoryChangesW discarded a batch of
+// events because the watch buffer overflowed. Each subscribed logical watch
+// receives an event whose path is the root passed to Watch. The event is
+// opt-in, is not included in All, and is not a native filter.
+const FileNotifyOverflow Event = 1 << 27
+
 const (
 	fileNotifyChangeAll      = 0x17f // logical sum of all FileNotifyChange* events.
 	fileNotifyChangeModified = fileNotifyChangeAll &^ (FileNotifyChangeFileName | FileNotifyChangeDirName)
@@ -71,6 +77,7 @@ const (
 const fileActionAll = 0x7f000 // logical sum of all FileAction* events.
 
 var osestr = map[Event]string{
+	FileNotifyOverflow:         "notify.FileNotifyOverflow",
 	FileNotifyChangeFileName:   "notify.FileNotifyChangeFileName",
 	FileNotifyChangeDirName:    "notify.FileNotifyChangeDirName",
 	FileNotifyChangeAttributes: "notify.FileNotifyChangeAttributes",
