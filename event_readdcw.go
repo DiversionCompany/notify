@@ -44,19 +44,10 @@ const (
 	FileNotifyChangeSecurity   = Event(syscallFileNotifyChangeSecurity)
 )
 
-// FileNotifyOverflow reports that ReadDirectoryChangesW discarded buffered
-// changes for a watch. Its path is the absolute, symlink-resolved root of the
-// subscribed watchpoint. Delivery is best-effort, like all notify events: the
-// event is dropped when the destination channel cannot accept it immediately.
-//
-// A filesystem activity burst may produce more than one FileNotifyOverflow
-// event because a watch can use multiple independent Windows buffers. Consumers
-// should treat it as an idempotent rescan trigger and may coalesce repeats.
-//
-// FileNotifyOverflow is opt-in and is not included in All. It is synthetic, not
-// a ReadDirectoryChangesW filter. When it is the only requested event, notify
-// arms all native change filters to detect buffer loss; ordinary change events
-// are still filtered from delivery.
+// FileNotifyOverflow reports that Windows discarded buffered changes for a
+// watch. It is opt-in, best-effort, may repeat, and is not included in All.
+// Consumers should treat it as an idempotent rescan trigger; Path is the watch
+// root.
 const FileNotifyOverflow Event = 1 << 27
 
 const (
