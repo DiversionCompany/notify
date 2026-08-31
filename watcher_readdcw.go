@@ -412,38 +412,33 @@ func (r *readdcw) loop() {
 	}
 }
 
-// handleSuccessfulCompletion parses a normal completion or reports a
-// successful zero-byte completion as an overflow, then rearms the watch and
-// advances any pending teardown state.
+// handleSuccessfulCompletion parses a normal completion, rearms the watch,
+// advances any pending teardown state, and then reports a zero-byte completion
+// as an overflow. The report is sent last because the backend channel can block.
 func (r *readdcw) handleSuccessfulCompletion(n uint32, overEx *overlappedEx,
-	rearm func(*grip) error) error {
+	rearm func(*grip) error) (err error) {
 	if n != 0 {
 		r.loopevent(n, overEx)
-	} else {
-		r.reportOverflow(overEx)
 	}
-	err := rearm(overEx.parent)
-	r.loopstate(overEx)
-	return err
-}
 
-// reportOverflow sends the synthetic overflow event only when the watch
-// explicitly requested it and is not being torn down.
-func (r *readdcw) reportOverflow(overEx *overlappedEx) {
 	g := overEx.parent
 	r.Lock()
 	filter := g.parent.filter
-	report := filter&onlyMachineStates == 0 &&
+	report := n == 0 && filter&onlyMachineStates == 0 &&
 		filter&uint32(FileNotifyOverflow) != 0
+	err = rearm(g)
+	r.loopstateLocked(overEx)
 	r.Unlock()
+
 	if !report {
-		return
+		return err
 	}
 	r.c <- &event{
 		pathw: g.pathw,
 		ftype: fTypeDirectory,
 		e:     FileNotifyOverflow,
 	}
+	return err
 }
 
 // handleFailedCompletion handles a completion packet dequeued with an error:
@@ -474,13 +469,6 @@ func (r *readdcw) handleFailedCompletion(overEx *overlappedEx, err error) {
 	if regErr := g.register(r.cph); regErr != nil {
 		errorf("readdcw: failed to recreate the watch handle for %q, watch is dead: %v", path, regErr)
 	}
-}
-
-// TODO(pknap) : doc
-func (r *readdcw) loopstate(overEx *overlappedEx) {
-	r.Lock()
-	defer r.Unlock()
-	r.loopstateLocked(overEx)
 }
 
 func (r *readdcw) loopstateLocked(overEx *overlappedEx) {

@@ -190,6 +190,74 @@ func TestSuccessfulZeroCompletionReportsOverflowAndRearms(t *testing.T) {
 	}
 }
 
+func TestSuccessfulZeroCompletionRearmsBeforeBlockedOverflowSend(t *testing.T) {
+	r, wd, overEx, _ := newSuccessfulCompletionTest(
+		t, uint32(Write|FileNotifyOverflow),
+	)
+	events := make(chan EventInfo, 1)
+	events <- &event{e: Write}
+	r.c = events
+
+	rearmed := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.handleSuccessfulCompletion(0, overEx, func(*grip) error {
+			close(rearmed)
+			return nil
+		})
+	}()
+
+	select {
+	case <-rearmed:
+	case <-time.After(5 * time.Second):
+		<-events // Let the blocked overflow send and handler finish.
+		if err := <-done; err != nil {
+			t.Fatalf("handleSuccessfulCompletion: %v", err)
+		}
+		t.Fatal("overflow delivery blocked the watch before it was rearmed")
+	}
+
+	rewatched := make(chan error, 1)
+	go func() {
+		rewatched <- r.Rewatch(
+			syscall.UTF16ToString(wd.pathw),
+			Write|FileNotifyOverflow,
+			Rename|FileNotifyOverflow,
+		)
+	}()
+	select {
+	case err := <-rewatched:
+		if err != nil {
+			t.Fatalf("Rewatch: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		<-events // Let the blocked overflow send release the watcher lock.
+		if err := <-done; err != nil {
+			t.Fatalf("handleSuccessfulCompletion: %v", err)
+		}
+		if err := <-rewatched; err != nil {
+			t.Fatalf("Rewatch: %v", err)
+		}
+		t.Fatal("overflow delivery blocked rewatch")
+	}
+
+	<-events // Remove the event that filled the channel.
+	select {
+	case event := <-events:
+		if event.Event() != FileNotifyOverflow {
+			t.Fatalf("event=%v; want %v", event.Event(), FileNotifyOverflow)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("overflow event was not delivered after rearm")
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("handleSuccessfulCompletion: %v", err)
+	}
+	if wd.count != 2 {
+		t.Fatalf("teardown count=%d; old completion consumed new rewatch state", wd.count)
+	}
+}
+
 func TestSuccessfulZeroCompletionSuppressedDuringTeardown(t *testing.T) {
 	tests := []struct {
 		name   string
