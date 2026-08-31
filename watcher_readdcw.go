@@ -414,7 +414,7 @@ func (r *readdcw) loop() {
 
 // handleSuccessfulCompletion parses a normal completion, rearms the watch,
 // advances any pending teardown state, and then reports a zero-byte completion
-// as an overflow. The report is sent last because the backend channel can block.
+// as an overflow.
 func (r *readdcw) handleSuccessfulCompletion(n uint32, overEx *overlappedEx,
 	rearm func(*grip) error) (err error) {
 	if n != 0 {
@@ -426,6 +426,7 @@ func (r *readdcw) handleSuccessfulCompletion(n uint32, overEx *overlappedEx,
 	filter := g.parent.filter
 	report := n == 0 && filter&onlyMachineStates == 0 &&
 		filter&uint32(FileNotifyOverflow) != 0
+	// Start the next native read before overflow delivery can block on r.c.
 	err = rearm(g)
 	r.loopstateLocked(overEx)
 	r.Unlock()
