@@ -7,6 +7,10 @@
 
 package notify
 
+func isWatchOverflow(EventInfo) bool {
+	return false
+}
+
 // eventmask uses ei to create a new event which contains internal flags used by
 // notify package logic.
 func eventmask(ei EventInfo, extra Event) Event {

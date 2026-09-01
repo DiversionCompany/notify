@@ -44,6 +44,12 @@ const (
 	FileNotifyChangeSecurity   = Event(syscallFileNotifyChangeSecurity)
 )
 
+// FileNotifyOverflow is a Windows-only, opt-in signal for discarded buffered
+// changes. Delivery is best-effort, may repeat, and is not included in All.
+// Treat it as an idempotent rescan trigger; Path is the matching Watch
+// registration's root, which may differ from the native watch root.
+const FileNotifyOverflow Event = 1 << 27
+
 const (
 	fileNotifyChangeAll      = 0x17f // logical sum of all FileNotifyChange* events.
 	fileNotifyChangeModified = fileNotifyChangeAll &^ (FileNotifyChangeFileName | FileNotifyChangeDirName)
@@ -71,6 +77,7 @@ const (
 const fileActionAll = 0x7f000 // logical sum of all FileAction* events.
 
 var osestr = map[Event]string{
+	FileNotifyOverflow:         "notify.FileNotifyOverflow",
 	FileNotifyChangeFileName:   "notify.FileNotifyChangeFileName",
 	FileNotifyChangeDirName:    "notify.FileNotifyChangeDirName",
 	FileNotifyChangeAttributes: "notify.FileNotifyChangeAttributes",

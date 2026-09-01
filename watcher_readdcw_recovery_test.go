@@ -63,9 +63,9 @@ func TestRecreateHandleAfterFailedCompletion(t *testing.T) {
 	r := newWatcher(c).(*readdcw)
 	defer r.Close()
 
-	// A Write-only filter creates a single grip (no directory grip), so there
-	// is exactly one pending I/O to abort.
-	if err := r.Watch(dir, Write); err != nil {
+	// The Write filter creates one grip. The synthetic overflow subscription
+	// does not add another, so there is one pending I/O to abort.
+	if err := r.Watch(dir, Write|FileNotifyOverflow); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -77,7 +77,10 @@ func TestRecreateHandleAfterFailedCompletion(t *testing.T) {
 		payload := []byte(stage)
 		for {
 			select {
-			case <-c:
+			case event := <-c:
+				if event.Event() == FileNotifyOverflow {
+					t.Fatalf("%s: failed completion was reported as overflow", stage)
+				}
 				return
 			case <-tick.C:
 				// Keep rewriting: the watcher may still be (re)arming.
@@ -117,7 +120,10 @@ func TestRecreateHandleAfterFailedCompletion(t *testing.T) {
 	// drain events emitted before the failure so the next await is genuine
 	for {
 		select {
-		case <-c:
+		case event := <-c:
+			if event.Event() == FileNotifyOverflow {
+				t.Fatal("failed completion was reported as overflow")
+			}
 			continue
 		default:
 		}
