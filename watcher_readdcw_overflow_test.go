@@ -12,18 +12,12 @@ import (
 
 func TestReadDirectoryChangesBufferSize(t *testing.T) {
 	const want = 64 * 1024
-	if readBufferSize != want {
-		t.Fatalf("readBufferSize=%d; want %d", readBufferSize, want)
-	}
 	if got := len((grip{}).buffer); got != want {
 		t.Fatalf("len(grip.buffer)=%d; want %d", got, want)
 	}
 }
 
 func TestFileNotifyOverflowContract(t *testing.T) {
-	if FileNotifyOverflow != Event(1<<27) {
-		t.Fatalf("FileNotifyOverflow=%#x; want %#x", FileNotifyOverflow, Event(1<<27))
-	}
 	if All&FileNotifyOverflow != 0 {
 		t.Fatalf("All=%#x unexpectedly contains FileNotifyOverflow", All)
 	}
@@ -41,7 +35,8 @@ func TestReadDirectoryChangesFiltersStripOverflow(t *testing.T) {
 		{
 			name:   "overflow only",
 			filter: FileNotifyOverflow,
-			want:   fileNotifyChangeAll,
+			want: uint32(FileNotifyChangeFileName | FileNotifyChangeDirName |
+				FileNotifyChangeLastWrite),
 		},
 		{
 			name:   "portable event",

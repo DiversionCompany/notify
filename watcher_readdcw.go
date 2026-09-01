@@ -145,7 +145,8 @@ func readDirectoryChangesFilter(filter uint32) uint32 {
 		return encoded
 	}
 	if Event(filter)&FileNotifyOverflow != 0 {
-		return fileNotifyChangeAll
+		return uint32(FileNotifyChangeFileName | FileNotifyChangeDirName |
+			FileNotifyChangeLastWrite)
 	}
 	return 0
 }

@@ -44,10 +44,10 @@ const (
 	FileNotifyChangeSecurity   = Event(syscallFileNotifyChangeSecurity)
 )
 
-// FileNotifyOverflow reports that Windows discarded buffered changes for a
-// watch. It is opt-in, best-effort, may repeat, and is not included in All.
-// Consumers should treat it as an idempotent rescan trigger; Path is the watch
-// root.
+// FileNotifyOverflow is a Windows-only, opt-in signal for discarded buffered
+// changes. Delivery is best-effort, may repeat, and is not included in All.
+// Treat it as an idempotent rescan trigger; Path is the matching Watch
+// registration's root, which may differ from the native watch root.
 const FileNotifyOverflow Event = 1 << 27
 
 const (
