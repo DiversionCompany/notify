@@ -16,11 +16,16 @@ import (
 	"unsafe"
 )
 
-// readBufferSize defines the size of an array in which read statuses are stored.
-// The buffer have to be DWORD-aligned and, if notify is used in monitoring a
-// directory over the network, its size must not be greater than 64KB. Each of
-// watched directories uses its own buffer for storing events.
-const readBufferSize = 64 * 1024
+// readBufferSize is the buffer size of each native watch handle. Windows keeps
+// a buffer of the same size for changes that arrive between two reads; when it
+// fills, Windows drops them all and reports an overflow.
+const readBufferSize = 512 * 1024
+
+// networkReadBufferSize is the largest buffer ReadDirectoryChangesW accepts
+// for a directory on a network share.
+const networkReadBufferSize = 64 * 1024
+
+const errorInvalidParameter syscall.Errno = 87
 
 // Since all operations which go through the Windows completion routine are done
 // asynchronously, filter may set one of the constants below. They were defined
@@ -55,7 +60,7 @@ type grip struct {
 	filter    uint32
 	recursive bool
 	pathw     []uint16
-	buffer    [readBufferSize]byte
+	buffer    []byte
 	parent    *watched
 	ovlapped  *overlappedEx
 }
@@ -77,6 +82,7 @@ func newGrip(cph syscall.Handle, parent *watched, filter uint32) (*grip, error) 
 		filter:    filter,
 		recursive: parent.recursive,
 		pathw:     parent.pathw,
+		buffer:    make([]byte, readBufferSize),
 		parent:    parent,
 		ovlapped:  &overlappedEx{},
 	}
@@ -101,7 +107,7 @@ func (g *grip) register(cph syscall.Handle) (err error) {
 		return
 	}
 	if _, err = syscall.CreateIoCompletionPort(g.handle, cph, 0, 0); err == nil {
-		err = g.readDirChanges()
+		err = g.armFirstRead((*grip).readDirChanges)
 	}
 	if err != nil {
 		// The handle was opened but never armed, so no completion will ever
@@ -113,6 +119,19 @@ func (g *grip) register(cph syscall.Handle) (err error) {
 		atomic.StoreUintptr((*uintptr)(&g.handle), uintptr(syscall.InvalidHandle))
 	}
 	return
+}
+
+// armFirstRead issues the first read on a new handle. A network share rejects
+// buffers over 64 KB, so on that error it retries with a 64 KB buffer.
+func (g *grip) armFirstRead(read func(*grip) error) error {
+	err := read(g)
+	if err == errorInvalidParameter && len(g.buffer) > networkReadBufferSize {
+		infof("readdcw: %q rejected a %d byte buffer, retrying with %d bytes",
+			syscall.UTF16ToString(g.pathw), len(g.buffer), networkReadBufferSize)
+		g.buffer = make([]byte, networkReadBufferSize)
+		err = read(g)
+	}
+	return err
 }
 
 // readDirChanges tells the system to store file change information in grip's
@@ -127,7 +146,7 @@ func (g *grip) readDirChanges() error {
 	return syscall.ReadDirectoryChanges(
 		handle,
 		&g.buffer[0],
-		uint32(unsafe.Sizeof(g.buffer)),
+		uint32(len(g.buffer)),
 		g.recursive,
 		readDirectoryChangesFilter(g.filter),
 		nil,

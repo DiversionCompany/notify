@@ -159,6 +159,7 @@ func TestRegisterFailureClosesHandle(t *testing.T) {
 		handle:   syscall.InvalidHandle,
 		filter:   uint32(Write),
 		pathw:    pathw,
+		buffer:   make([]byte, readBufferSize),
 		ovlapped: &overlappedEx{},
 	}
 	g.ovlapped.parent = g
