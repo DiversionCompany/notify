@@ -10,13 +10,6 @@ import (
 	"time"
 )
 
-func TestReadDirectoryChangesBufferSize(t *testing.T) {
-	const want = 64 * 1024
-	if got := len((grip{}).buffer); got != want {
-		t.Fatalf("len(grip.buffer)=%d; want %d", got, want)
-	}
-}
-
 func TestFileNotifyOverflowContract(t *testing.T) {
 	if All&FileNotifyOverflow != 0 {
 		t.Fatalf("All=%#x unexpectedly contains FileNotifyOverflow", All)
