@@ -86,10 +86,12 @@ func newGrip(cph syscall.Handle, parent *watched, filter uint32) (*grip, error) 
 		parent:    parent,
 		ovlapped:  &overlappedEx{},
 	}
+	// Set parent before register starts the first read: the loop goroutine
+	// reads it as soon as that read completes.
+	g.ovlapped.parent = g
 	if err := g.register(cph); err != nil {
 		return nil, err
 	}
-	g.ovlapped.parent = g
 	return g, nil
 }
 
