@@ -81,23 +81,20 @@ Traverse:
 		if err != nil {
 			return err
 		}
-		names, err := f.Readdirnames(-1)
+		entries, err := f.ReadDir(-1)
 		f.Close()
 		if err != nil {
 			return err
 		}
-		for _, name := range names {
-			name = filepath.Join(nd.Name, name)
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			name := filepath.Join(nd.Name, entry.Name())
 			if doNotWatch != nil && doNotWatch(name) {
 				continue
 			}
-			fi, err := os.Lstat(name)
-			if err != nil {
-				return err
-			}
-			if fi.Mode()&(os.ModeSymlink|os.ModeDir) == os.ModeDir {
-				stack = append(stack, nd.addchild(name, name[len(nd.Name)+1:]))
-			}
+			stack = append(stack, nd.addchild(name, name[len(nd.Name)+1:]))
 		}
 	}
 	return nil
